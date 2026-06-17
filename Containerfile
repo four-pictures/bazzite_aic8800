@@ -42,18 +42,18 @@ RUN bootc container lint
 # --- AIC8800 Wi-Fi Driver Build Section ---
 RUN dnf install -y git make gcc kernel-devel-matched && \
     git clone https://github.com/shenmintao/aic8800d80 /tmp/aic8800 && \
-    # ファームウェアの配置
+    # 1. ファームウェアの配置
     mkdir -p /usr/lib/firmware/aic8800D80 && \
     cp -r /tmp/aic8800/fw/aic8800D80/* /usr/lib/firmware/aic8800D80/ && \
-    # カーネルバージョンの取得
+    # 2. カーネルバージョンの取得
     export KVER=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel-core | head -n 1) && \
-    # 公式スクリプトのパス指定をBazzite（Fedora）の構成に書き換えて実行
-    cd /tmp/aic8800 && \
-    sed -i "s|/lib/modules/\$(uname -r)/build|/lib/modules/$KVER/build|g" install.sh && \
-    sed -i "s|/lib/modules/\$(uname -r)/kernel/drivers/net/wireless/|/usr/lib/modules/$KVER/extra/|g" install.sh && \
-    sed -i "s|depmod -a|depmod -a $KVER|g" install.sh && \
+    # 3. ドライバーのソースがある正確なサブフォルダへ移動してビルド
+    cd /tmp/aic8800/drivers/aic8800/aic8800_fdrv && \
+    make -C /lib/modules/$KVER/build M=$(pwd) modules && \
+    # 4. 生成されたバイナリをBazziteの正しいパスへ直接コピー
     mkdir -p /usr/lib/modules/$KVER/extra && \
-    bash install.sh && \
+    cp aic8800_fdrv.ko /usr/lib/modules/$KVER/extra/ && \
+    depmod -a $KVER && \
     # 不要なツールの削除とクリーンアップ
     dnf remove -y git make gcc kernel-devel-matched && \
     dnf clean all && \
