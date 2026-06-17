@@ -38,3 +38,23 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 ### LINTING
 ## Verify final image and contents are correct.
 RUN bootc container lint
+
+# --- AIC8800 Wi-Fi Driver Build Section ---
+RUN dnf install -y git make gcc kernel-devel-$(uname -r) && \
+    git clone https://github.com /tmp/aic8800 && \
+    mkdir -p /usr/lib/firmware/aic8800D80 && \
+    cp -r /tmp/aic8800/fw/aic8800D80/* /usr/lib/firmware/aic8800D80/ && \
+    cd /tmp/aic8800/drivers/aic8800 && \
+    make -C /lib/modules/$(uname -r)/build M=$(pwd) modules && \
+    mkdir -p /usr/lib/modules/$(uname -r)/extra && \
+    cp aic8800_fdrv.ko /usr/lib/modules/$(uname -r)/extra/ && \
+    depmod -a $(uname -r) && \
+    dnf remove -y git make gcc kernel-devel && \
+    dnf clean all && \
+    rm -rf /tmp/aic8800
+
+RUN echo -e '#!/bin/bash\n/usr/sbin/usb_modeswitch -KQ -v a69c -p 5723\nsleep 3\nmodprobe aic8800_fdrv' > /usr/usr-local-bin-wifi-init.sh && \
+    chmod +x /usr/usr-local-bin-wifi-init.sh
+
+RUN echo -e '[Unit]\nDescription=Setup AIC8800 Wi-Fi\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=/usr/usr-local-bin-wifi-init.sh\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target' > /etc/systemd/system/aic8800-wifi.service && \
+    systemctl enable aic8800-wifi.service
